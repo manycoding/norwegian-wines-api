@@ -10,6 +10,8 @@ zappa = "*"
 flask-restful = "*"
 algoliasearch = "*"
 numpy = "*"
+webargs = "*"
+sentence-transformers = "*"
 
 [requires]
 python_version = "3.6"

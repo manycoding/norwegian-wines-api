@@ -3,8 +3,11 @@ import os
 from algoliasearch.search_client import SearchClient
 from algoliasearch.exceptions import RequestException
 from flask import Flask
-from flask_restful import Resource, Api, reqparse
+from flask_restful import Resource, Api
 import numpy as np
+from webargs import fields, validate
+from webargs.flaskparser import use_args, use_kwargs, parser, abort
+
 
 app = Flask(__name__)
 api = Api(app)
@@ -17,25 +20,37 @@ index = client.init_index(ALGOLIA_INDEX)
 
 
 class Similar(Resource):
-    def get(self, object_id: str):
+    @use_kwargs(
+        {"object_ids": fields.List(fields.Str(), required=True)}, location="json",
+    )
+    def post(self, object_ids):
         """Get similar products for object_id
         Returns:
             A list of top 100 similar object_ids
         """
-        try:
-            result = index.get_object(
-                object_id, {"attributesToRetrieve": ["description-similar"]}
+        if len(object_ids) == 1:
+            try:
+                result = index.get_object(
+                    object_ids[0], {"attributesToRetrieve": ["description-similar"]}
+                )
+            except RequestException as e:
+                return f"objectID {object_ids[0]} does not exist", 404
+
+            return (
+                list(np.array(result.get("description-similar", []))[:, 0]),
+                200,
             )
-        except RequestException as e:
-            return f"objectID {object_id} does not exist", 404
-
-        return (
-            list(np.array(result.get("description-similar", []))[:, 0]),
-            200,
-        )
 
 
-api.add_resource(Similar, "/similar/<string:object_id>")
+@parser.error_handler
+def handle_request_parsing_error(err, req, schema, *, error_status_code, error_headers):
+    """webargs error handler that uses Flask-RESTful's abort function to return
+    a JSON error response to the client.
+    """
+    abort(error_status_code, errors=err.messages)
+
+
+api.add_resource(Similar, "/similar")
 
 if __name__ == "__main__":
     app.run(debug=DEBUG)
