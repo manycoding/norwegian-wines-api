@@ -12,6 +12,7 @@ algoliasearch = "*"
 numpy = "*"
 webargs = "*"
 sentence-transformers = "*"
+scipy = "*"
 
 [requires]
 python_version = "3.6"
