@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import zipfile
+from typing import *
 
 from algoliasearch.search_client import SearchClient
 from algoliasearch.exceptions import RequestException
@@ -53,10 +54,11 @@ class Similar(Resource):
     @use_kwargs(
         {"object_ids": fields.List(fields.Str(), required=True)}, location="json",
     )
-    def post(self, object_ids):
+    def post(self, object_ids: List[str]) -> Tuple[Dict, int]:
         """Get similar products for object_ids
         Returns:
-            A list of top 100 similar object_ids
+            A tuple of dict with message and results, and a status code.
+            Results contain a list of top 100 similar object_ids
         """
         answer = {}
         if not object_ids:
