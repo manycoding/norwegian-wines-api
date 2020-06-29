@@ -13,6 +13,7 @@ numpy = "*"
 webargs = "*"
 sentence-transformers = "*"
 scipy = "*"
+flask-apispec = "*"
 
 [requires]
 python_version = "3.6"

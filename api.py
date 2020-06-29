@@ -12,11 +12,13 @@ import numpy as np
 import scipy
 from sentence_transformers import SentenceTransformer
 from webargs import fields, validate
-from webargs.flaskparser import use_args, use_kwargs, parser, abort
+from webargs.flaskparser import parser, abort
+from flask_apispec import FlaskApiSpec, use_kwargs, marshal_with, MethodResource
 
 
 app = Flask(__name__)
 api = Api(app)
+docs = FlaskApiSpec(app)
 ALGOLIA_ID = os.environ.get("ALGOLIA_ID")
 ALGOLIA_KEY = os.environ.get("ALGOLIA_KEY")
 ALGOLIA_INDEX = os.environ.get("ALGOLIA_INDEX")
@@ -50,9 +52,9 @@ def get_embedder():
 embedder, corpus_embeddings = get_embedder()
 
 
-class Similar(Resource):
+class Similar(MethodResource):
     @use_kwargs(
-        {"object_ids": fields.List(fields.Str(), required=True)}, location="json",
+        {"object_ids": fields.List(fields.Str(), required=True)}, locations=["json"],
     )
     def post(self, object_ids: List[str]) -> Tuple[Dict, int]:
         """Get similar products for object_ids
@@ -113,6 +115,7 @@ def handle_request_parsing_error(err, req, schema, *, error_status_code, error_h
 
 
 api.add_resource(Similar, "/similar")
+docs.register(Similar)
 
 if __name__ == "__main__":
     app.run(debug=DEBUG)
