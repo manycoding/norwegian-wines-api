@@ -106,8 +106,40 @@ def get_attribute(object_ids, attr):
         return [], result
 
 
+class Best(MethodResource):
+    index.set_settings({"attributesForFaceting": ["filterOnly(rating-price-rank)"]})
+
+    @use_kwargs(
+        {"n": fields.Int(missing=99)}, locations=["json"],
+    )
+    def post(self, n: int) -> Tuple[Dict, int]:
+        """Get best wines by rating to pricePerLiter rank
+        Returns:
+            A tuple of dict with message and results, and a status code.
+            Results contain a list of best wine names with object_ids
+        """
+        answer = {}
+        response = get_objects_with(f"rating-price-rank: 0 TO {n}")
+        response = sorted(response, key=lambda x: x["rating-price-rank"])
+        answer["results"] = [
+            {"name": r["name"], "objectID": r["objectID"]} for r in response
+        ]
+        return answer, 200
+
+
+def get_objects_with(filters: Optional[Dict]) -> List[Dict]:
+    results = []
+    res = index.browse_objects({"filters": filters})
+    while True:
+        try:
+            results.append(res.next())
+        except:
+            break
+    return results
+
+
 @parser.error_handler
-def handle_request_parsing_error(err, req, schema, *, error_status_code, error_headers):
+def handle_request_parsing_error(err, req, schema, error_status_code, error_headers):
     """webargs error handler that uses Flask-RESTful's abort function to return
     a JSON error response to the client.
     """
@@ -115,7 +147,9 @@ def handle_request_parsing_error(err, req, schema, *, error_status_code, error_h
 
 
 api.add_resource(Similar, "/similar")
+api.add_resource(Best, "/best")
 docs.register(Similar)
+docs.register(Best)
 
 if __name__ == "__main__":
     app.run(debug=DEBUG)
