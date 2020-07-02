@@ -9,6 +9,7 @@ import boto3
 from flask import Flask
 from flask_restful import Resource, Api
 import numpy as np
+import pandas as pd
 import scipy
 from sentence_transformers import SentenceTransformer
 from webargs import fields, validate
@@ -119,7 +120,7 @@ class Best(MethodResource):
             Results contain a list of best wine names with object_ids
         """
         answer = {}
-        response = get_objects_with(f"rating-price-rank: 0 TO {n}")
+        response = get_products_with(f"rating-price-rank: 0 TO {n}")
         response = sorted(response, key=lambda x: x["rating-price-rank"])
         answer["results"] = [
             {"name": r["name"], "objectID": r["objectID"]} for r in response
@@ -127,7 +128,7 @@ class Best(MethodResource):
         return answer, 200
 
 
-def get_objects_with(filters: Optional[Dict]) -> List[Dict]:
+def get_products_with(filters: str = "") -> List[Dict]:
     results = []
     res = index.browse_objects({"filters": filters})
     while True:
@@ -136,6 +137,30 @@ def get_objects_with(filters: Optional[Dict]) -> List[Dict]:
         except:
             break
     return results
+
+
+class BestCountries(MethodResource):
+    @use_kwargs(
+        {"min_total": fields.Int(missing=1)}, locations=["json"],
+    )
+    def post(self, min_total: int) -> Tuple[Dict, int]:
+        answer = {}
+        response = get_products_with()
+        wines = pd.DataFrame(response).replace("", np.nan)
+        countries = pd.DataFrame(
+            wines["origins-origin-country"].value_counts(dropna=True)
+        ).sort_index()
+        countries.rename(columns={"origins-origin-country": "total"}, inplace=True)
+        countries["average_rating"] = (
+            wines.groupby(["origins-origin-country"])["aggregateRating-ratingValue"]
+            .mean()
+            .sort_index()
+        )
+        countries.sort_values(["average_rating"], ascending=False, inplace=True)
+        answer["results"] = countries.round(4)[countries["total"] > min_total].to_dict(
+            "index"
+        )
+        return answer, 200
 
 
 @parser.error_handler
@@ -148,8 +173,10 @@ def handle_request_parsing_error(err, req, schema, error_status_code, error_head
 
 api.add_resource(Similar, "/similar")
 api.add_resource(Best, "/best")
+api.add_resource(BestCountries, "/best_countries")
 docs.register(Similar)
 docs.register(Best)
+docs.register(BestCountries)
 
 if __name__ == "__main__":
     app.run(debug=DEBUG)
