@@ -15,6 +15,7 @@ sentence-transformers = "*"
 scipy = "*"
 flask-apispec = "*"
 pandas = "*"
+flask-caching = "*"
 
 [requires]
 python_version = "3.6"

@@ -8,6 +8,8 @@ from algoliasearch.search_client import SearchClient
 from algoliasearch.exceptions import RequestException
 import boto3
 from flask import Flask
+from flask_apispec import FlaskApiSpec, use_kwargs, marshal_with, MethodResource
+from flask_caching import Cache
 from flask_restful import Resource, Api
 import numpy as np
 import pandas as pd
@@ -15,16 +17,19 @@ import scipy
 from sentence_transformers import SentenceTransformer
 from webargs import fields, validate
 from webargs.flaskparser import parser, abort
-from flask_apispec import FlaskApiSpec, use_kwargs, marshal_with, MethodResource
 
-
-app = Flask(__name__)
-api = Api(app)
-docs = FlaskApiSpec(app)
 ALGOLIA_ID = os.environ.get("ALGOLIA_ID")
 ALGOLIA_KEY = os.environ.get("ALGOLIA_KEY")
 ALGOLIA_INDEX = os.environ.get("ALGOLIA_INDEX")
 DEBUG = os.environ.get("DEBUG", False)
+config = {"DEBUG": DEBUG, "CACHE_TYPE": "simple", "CACHE_DEFAULT_TIMEOUT": 300}
+
+
+app = Flask(__name__)
+app.config.from_mapping(config)
+cache = Cache(app)
+api = Api(app)
+docs = FlaskApiSpec(app)
 client = SearchClient.create(ALGOLIA_ID, ALGOLIA_KEY)
 index = client.init_index(ALGOLIA_INDEX)
 
@@ -129,6 +134,7 @@ class Best(MethodResource):
         return answer, 200
 
 
+@cache.memoize(86400)
 def get_products_with(filters: str = "") -> List[Dict]:
     results = []
     res = index.browse_objects({"filters": filters})
