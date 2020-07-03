@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import zipfile
+import re
 from typing import *
 
 from algoliasearch.search_client import SearchClient
@@ -144,6 +145,8 @@ class BestCountries(MethodResource):
         {"min_total": fields.Int(missing=1)}, locations=["json"],
     )
     def post(self, min_total: int) -> Tuple[Dict, int]:
+        """Get countries with average rating
+        """
         answer = {}
         response = get_products_with()
         wines = pd.DataFrame(response).replace("", np.nan)
@@ -163,6 +166,39 @@ class BestCountries(MethodResource):
         return answer, 200
 
 
+class BestRegions(MethodResource):
+    @use_kwargs(
+        {"min_total": fields.Int(missing=10), "min_rating": fields.Float(missing=4.0)},
+        locations=["json"],
+    )
+    def post(self, min_total: int, min_rating: float) -> Tuple[Dict, int]:
+        """Get regions with percentage of wines with good rating
+        """
+        answer = {}
+        response = get_products_with()
+        wines = (
+            pd.DataFrame(response)
+            .replace(["", 0], np.nan)
+            .dropna(subset=["aggregateRating-ratingValue", "origins-origin-region"])
+        )
+        regions = pd.DataFrame(
+            wines["origins-origin-region"].value_counts()
+        ).sort_index()
+        regions.rename(columns={"origins-origin-region": "total"}, inplace=True)
+        regions_group = wines.groupby("origins-origin-region")[
+            "aggregateRating-ratingValue"
+        ]
+        regions["top_wines_percentage"] = regions_group.apply(
+            lambda x: len(x[x >= min_rating]) / len(x) * 100
+        ).round()
+        regions = regions.sort_values(
+            ["top_wines_percentage", "total"], ascending=False
+        )
+
+        answer["results"] = regions[regions["total"] > min_total].to_dict("index")
+        return answer, 200
+
+
 @parser.error_handler
 def handle_request_parsing_error(err, req, schema, error_status_code, error_headers):
     """webargs error handler that uses Flask-RESTful's abort function to return
@@ -171,12 +207,11 @@ def handle_request_parsing_error(err, req, schema, error_status_code, error_head
     abort(error_status_code, errors=err.messages)
 
 
-api.add_resource(Similar, "/similar")
-api.add_resource(Best, "/best")
-api.add_resource(BestCountries, "/best_countries")
-docs.register(Similar)
-docs.register(Best)
-docs.register(BestCountries)
+resources = [Similar, Best, BestCountries, BestRegions]
+for r in resources:
+    url = re.sub("(?!^)([A-Z]+)", r"_\1", r.__name__).lower()
+    api.add_resource(r, f"/{url}")
+    docs.register(r)
 
 if __name__ == "__main__":
     app.run(debug=DEBUG)
