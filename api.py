@@ -1,3 +1,4 @@
+from collections import Counter
 import os
 from pathlib import Path
 import zipfile
@@ -114,8 +115,6 @@ def get_attribute(object_ids, attr):
 
 
 class Best(MethodResource):
-    index.set_settings({"attributesForFaceting": ["filterOnly(rating-price-rank)"]})
-
     @use_kwargs(
         {"n": fields.Int(missing=99)}, locations=["json"],
     )
@@ -205,6 +204,71 @@ class BestRegions(MethodResource):
         return answer, 200
 
 
+class Keywords(MethodResource):
+    index.set_settings(
+        {
+            "attributesForFaceting": [
+                "filterOnly(origins-origin-country)",
+                "filterOnly(origins-origin-region)",
+                "filterOnly(origins-origin-subRegion)",
+            ]
+        }
+    )
+
+    @use_kwargs(
+        {"loc": fields.Str(), "n": fields.Int(missing=100)}, locations=["json"],
+    )
+    def post(self, loc: str, n: int) -> Tuple[Dict, int]:
+        """Get most common keywords for a given wine location
+        Returns:
+            A tuple of dict with message and results, and a status code.
+            Results contain a list of keywords
+        """
+        answer = {}
+        filters = (
+            f"origins-origin-country:{loc} OR origins-origin-region:{loc} OR "
+            f"origins-origin-subRegion:{loc}"
+        )
+        response = get_products_with(filters)
+        if not len(response):
+            answer["message"] = f"No wines found for '{loc}'"
+
+        text = get_description(response)
+        keywords = get_keywords(text, n)
+        answer["results"] = [k[0] for k in keywords]
+        return answer, 200
+
+
+def get_keywords(text: str, n: int) -> str:
+    words = {k for k in text.split() if len(k) > 2}
+    keywords = Counter(words)
+    stopwords = ["avec", "med"]
+    for s in stopwords:
+        while s in keywords:
+            keywords.pop(s)
+    return keywords.most_common(n)
+
+
+def get_description(raw_wines: List[Dict]) -> str:
+    description = " ".join(
+        [
+            " ".join(
+                [
+                    w["description-characteristics-colour"],
+                    w["description-characteristics-odour"],
+                    w["description-characteristics-taste"],
+                ]
+            )
+            for w in raw_wines
+        ]
+    ).lower()
+    mapping = dict.fromkeys("0123456789,!.;()")
+    mapping["/"] = " "
+    table = str.maketrans(mapping)
+    description = description.translate(table)
+    return description.translate(table)
+
+
 @parser.error_handler
 def handle_request_parsing_error(err, req, schema, error_status_code, error_headers):
     """webargs error handler that uses Flask-RESTful's abort function to return
@@ -213,7 +277,7 @@ def handle_request_parsing_error(err, req, schema, error_status_code, error_head
     abort(error_status_code, errors=err.messages)
 
 
-resources = [Similar, Best, BestCountries, BestRegions]
+resources = [Similar, Best, BestCountries, BestRegions, Keywords]
 for r in resources:
     url = re.sub("(?!^)([A-Z]+)", r"_\1", r.__name__).lower()
     api.add_resource(r, f"/{url}")
