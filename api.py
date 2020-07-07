@@ -74,18 +74,7 @@ class Similar(MethodResource):
         if not object_ids:
             answer["message"] = "'object_ids' should not be empty"
             return answer
-        if len(object_ids) == 1:
-            result, response = get_attribute(object_ids, "description-similar")
-            if result:
-                answer["results"] = list(np.array(result[0])[:, 0])
-            if response.get("message"):
-                answer["message"] = response.get("message")
-                answer["results"] = result
-            return (
-                answer,
-                200,
-            )
-        elif len(object_ids) > 1:
+        else:
             result, response = get_attribute(object_ids, "description-profile")
             query = ". ".join(result)
             if response.get("message"):
@@ -97,16 +86,16 @@ class Similar(MethodResource):
                 return answer, 404
             query_embeddings = embedder.encode([query])
             distances = scipy.spatial.distance.cdist(
-                query_embeddings, list(corpus_embeddings[:, 1]), "cosine"
+                query_embeddings, list(corpus_embeddings[1]), "cosine"
             )[0]
-            results = zip(corpus_embeddings[:, 0], distances)
+            results = zip(corpus_embeddings[0], distances)
             results = sorted(results, key=lambda x: x[1])
             results = list(filter(lambda x: x[0] not in object_ids, results))[:100]
             answer["results"] = list(np.array(results)[:, 0])
             return answer, 200
 
 
-def get_attribute(object_ids, attr):
+def get_attribute(object_ids, attr) -> Tuple[List, Dict]:
     try:
         result = index.get_objects(object_ids, {"attributesToRetrieve": [attr]})
         return [d[attr] for d in result["results"] if d], result
@@ -125,7 +114,7 @@ class Best(MethodResource):
             Results contain a list of best wine names with object_ids
         """
         answer = {}
-        response = get_products_with(f"rating-price-rank: 0 TO {n}")
+        response = get_products_with(f"rating-price-rank: 1 TO {n}")
         response = sorted(response, key=lambda x: x["rating-price-rank"])
         answer["results"] = [
             {"name": r["name"], "objectID": r["objectID"]} for r in response
